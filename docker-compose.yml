@@ -1,0 +1,51 @@
+services:
+  questdb:
+    image: questdb/questdb:latest
+    container_name: p1-questdb
+    ports:
+      - "9000:9000"   # Web Console
+      - "9009:9009"   # ILP
+      - "8812:8812"   # PostgreSQL
+    volumes:
+      - questdb_data:/var/lib/questdb
+    environment:
+      - QDB_PG_USER=admin
+      - QDB_PG_PASSWORD=quest
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:9000/ping || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - p1-network
+
+  p1-meter-monitor:
+    build: .
+    image: p1-meter-monitor:latest
+    container_name: p1-meter-monitor
+    volumes:
+      - ./output:/output
+      - ./logs:/var/log
+    env_file:
+      - .env
+    environment:
+      - QUESTDB_HOST=questdb
+      - QUESTDB_PORT=8812
+      - QUESTDB_USER=admin
+      - QUESTDB_PASSWORD=quest
+    depends_on:
+      - questdb
+    restart: unless-stopped
+    networks:
+      - p1-network
+
+networks:
+  p1-network:
+    driver: bridge
+
+volumes:
+  questdb_data:
+    driver: local
+

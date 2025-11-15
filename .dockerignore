@@ -1,0 +1,13 @@
+**/.git
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.Python
+**/.DS_Store
+*.log
+.env
+README.md
+output/
+logs/
+
