@@ -4,6 +4,8 @@ Email HTML Templates
 """
 
 from jinja2 import Template
+from datetime import datetime
+import pytz
 
 
 MONTHLY_REPORT_TEMPLATE = """
@@ -149,9 +151,28 @@ def generate_monthly_html(stats, live_data, has_csv_attachment=True, graph_image
     # Calculate net consumption
     net_consumption = float(stats.get('electricity_consumed', 0)) - float(stats.get('electricity_produced', 0))
     
-    # Format dates
-    period_start = stats.get('period_start', '').strftime('%Y-%m-%d') if stats.get('period_start') else 'N/A'
-    period_end = stats.get('period_end', '').strftime('%Y-%m-%d') if stats.get('period_end') else 'N/A'
+    # Format dates (convert UTC to Europe/Amsterdam timezone)
+    amsterdam_tz = pytz.timezone('Europe/Amsterdam')
+    utc_tz = pytz.UTC
+    
+    period_start = 'N/A'
+    period_end = 'N/A'
+    
+    if stats.get('period_start'):
+        period_start_dt = stats.get('period_start')
+        # Convert naive UTC datetime to timezone-aware, then to Amsterdam timezone
+        if period_start_dt.tzinfo is None:
+            period_start_dt = utc_tz.localize(period_start_dt)
+        period_start_ams = period_start_dt.astimezone(amsterdam_tz)
+        period_start = period_start_ams.strftime('%Y-%m-%d')
+    
+    if stats.get('period_end'):
+        period_end_dt = stats.get('period_end')
+        # Convert naive UTC datetime to timezone-aware, then to Amsterdam timezone
+        if period_end_dt.tzinfo is None:
+            period_end_dt = utc_tz.localize(period_end_dt)
+        period_end_ams = period_end_dt.astimezone(amsterdam_tz)
+        period_end = period_end_ams.strftime('%Y-%m-%d')
     
     # Calculate previous month comparison (only for monthly reports)
     prev_month_comparison = None
