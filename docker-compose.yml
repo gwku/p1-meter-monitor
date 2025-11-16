@@ -5,7 +5,7 @@ services:
     ports:
       - "9000:9000"   # Web Console
       - "9009:9009"   # ILP
-      - "8812:8812"   # PostgreSQL
+      - "8812:8812"   # QuestDB PostgreSQL
     volumes:
       - questdb_data:/var/lib/questdb
     environment:
@@ -13,11 +13,10 @@ services:
       - QDB_PG_PASSWORD=quest
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:9000/ping || exit 1"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/9000 || exit 1'"]
       interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      timeout: 10s
+      retries: 10
     networks:
       - p1-network
 

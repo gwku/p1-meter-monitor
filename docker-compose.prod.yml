@@ -4,8 +4,6 @@ services:
   questdb:
     image: questdb/questdb:latest
     container_name: p1-questdb
-    # Ports not exposed in production - access via Docker network only
-    # To access QuestDB console, use: docker-compose exec or port forward
     volumes:
       - questdb_data:/var/lib/questdb
     environment:
@@ -13,18 +11,15 @@ services:
       - QDB_PG_PASSWORD=quest
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:9000/ping || exit 1"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/9000 || exit 1'"]
       interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      timeout: 10s
+      retries: 10
     networks:
       - p1-network
 
   p1-meter-monitor:
-    # Use pre-built image from GitHub Container Registry
-    # Replace 'yourusername/p1-meter-monitor' with your actual GitHub username/repo
-    image: ghcr.io/${GITHUB_REPOSITORY:-yourusername/p1-meter-monitor}:${IMAGE_TAG:-latest}
+    image: ghcr.io/gwku/p1-meter-monitor:${IMAGE_TAG:-latest}
     container_name: p1-meter-monitor
     volumes:
       - ./output:/output
