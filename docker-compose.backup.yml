@@ -1,0 +1,35 @@
+# QuestDB Backup Service
+# Runs daily backup using cron
+services:
+  questdb-backup:
+    image: alpine:latest
+    container_name: questdb-backup
+    volumes:
+      - ./backups:/backups
+      - p1-meter-monitor_questdb_data:/source:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - BACKUP_DIR=/backups
+      - RETENTION_DAYS=30
+      - VOLUME_NAME=p1-meter-monitor_questdb_data
+      - QUESTDB_CONTAINER=p1-questdb
+    command: >
+      sh -c "
+        apk add --no-cache docker-cli curl bash &&
+        echo '0 2 * * * /backup-script.sh >> /backups/backup.log 2>&1' | crontab - &&
+        crond -f -l 2
+      "
+    restart: unless-stopped
+    networks:
+      - p1-network
+    depends_on:
+      - questdb
+
+volumes:
+  p1-meter-monitor_questdb_data:
+    external: true
+
+networks:
+  p1-network:
+    external: true
+
