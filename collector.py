@@ -9,6 +9,7 @@ import logging
 import requests
 from datetime import datetime
 import psycopg2
+from psycopg2 import errors as psycopg2_errors
 from psycopg2.extras import RealDictCursor
 
 logger = logging.getLogger(__name__)
@@ -127,8 +128,32 @@ class P1Collector:
                     f"Import: {values['total_power_import_kwh']:.3f} kWh | "
                     f"Gas: {values['total_gas_m3']:.3f} m³"
                 )
-            finally:
+            except psycopg2_errors.UndefinedTable as e:
+                # Table doesn't exist, try to create it
+                logger.warning("Table does not exist, attempting to create...")
                 conn.close()
+                self._init_database()
+                # Retry the insert
+                conn = self._get_db_connection()
+                if conn:
+                    try:
+                        with conn.cursor() as cur:
+                            cur.execute("""
+                                INSERT INTO p1_meter_data VALUES (
+                                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                                )
+                            """, tuple(values.values()))
+                            conn.commit()
+                        logger.info(
+                            f"✓ Data stored (after table creation) | Power: {values['active_power_w']:.0f}W | "
+                            f"Import: {values['total_power_import_kwh']:.3f} kWh | "
+                            f"Gas: {values['total_gas_m3']:.3f} m³"
+                        )
+                    finally:
+                        conn.close()
+            finally:
+                if conn and not conn.closed:
+                    conn.close()
                 
         except requests.exceptions.RequestException as e:
             logger.error(f"✗ Failed to fetch from P1 API: {e}")

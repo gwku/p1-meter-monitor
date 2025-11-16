@@ -7,11 +7,16 @@ Generates reports and sends emails
 import os
 import logging
 import csv
+import base64
 from datetime import datetime, timedelta
-from io import StringIO
+from io import StringIO, BytesIO
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import requests
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 
 from email_sender import EmailSender
 from email_templates import generate_monthly_html
@@ -88,6 +93,215 @@ class P1Reporter:
         
         return self.get_period_stats(last_month_start, last_month_end)
     
+    def get_previous_month_stats(self, current_month_start):
+        """Get statistics for the month before the given month"""
+        # Calculate previous month boundaries
+        prev_month_end = current_month_start
+        prev_month_start = (current_month_start - timedelta(days=1)).replace(day=1)
+        
+        return self.get_period_stats(prev_month_start, prev_month_end)
+    
+    def get_yearly_monthly_totals(self, year=None):
+        """Get monthly totals for a given year (default: current year)"""
+        if year is None:
+            year = datetime.now().year
+        
+        conn = self._get_db_connection()
+        try:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                # Get data for the entire year
+                year_start = datetime(year, 1, 1)
+                year_end = datetime(year + 1, 1, 1)
+                
+                # Query to get monthly totals using SAMPLE BY
+                cur.execute("""
+                    SELECT 
+                        timestamp,
+                        round((last(total_power_import_kwh) - first(total_power_import_kwh))::decimal, 2) as electricity_consumed,
+                        round((last(total_power_import_t1_kwh) - first(total_power_import_t1_kwh))::decimal, 2) as consumed_t1,
+                        round((last(total_power_import_t2_kwh) - first(total_power_import_t2_kwh))::decimal, 2) as consumed_t2,
+                        round((last(total_power_export_kwh) - first(total_power_export_kwh))::decimal, 2) as electricity_produced,
+                        round((last(total_gas_m3) - first(total_gas_m3))::decimal, 2) as gas_consumed
+                    FROM p1_meter_data
+                    WHERE timestamp >= %s AND timestamp < %s
+                    SAMPLE BY 1M
+                    ORDER BY timestamp ASC
+                """, (year_start, year_end))
+                
+                rows = cur.fetchall()
+                return rows if rows else []
+        except Exception as e:
+            logger.warning(f"Error getting yearly monthly totals with SAMPLE BY: {e}")
+            # Fallback: manually calculate monthly totals
+            return self._get_yearly_monthly_totals_fallback(year)
+        finally:
+            conn.close()
+    
+    def _get_yearly_monthly_totals_fallback(self, year):
+        """Fallback method to calculate monthly totals manually"""
+        monthly_totals = []
+        for month in range(1, 13):
+            month_start = datetime(year, month, 1)
+            if month == 12:
+                month_end = datetime(year + 1, 1, 1)
+            else:
+                month_end = datetime(year, month + 1, 1)
+            
+            stats = self.get_period_stats(month_start, month_end)
+            if stats and stats.get('total_records', 0) > 0:
+                monthly_totals.append({
+                    'timestamp': month_start,
+                    'electricity_consumed': stats.get('electricity_consumed', 0),
+                    'consumed_t1': stats.get('consumed_t1', 0),
+                    'consumed_t2': stats.get('consumed_t2', 0),
+                    'electricity_produced': stats.get('electricity_produced', 0),
+                    'gas_consumed': stats.get('gas_consumed', 0)
+                })
+        
+        return monthly_totals
+    
+    def get_period_data(self, start_date, end_date):
+        """Get raw data for a specific period (for graphing)"""
+        conn = self._get_db_connection()
+        try:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT timestamp, active_power_w, total_power_import_kwh, total_power_export_kwh, total_gas_m3
+                    FROM p1_meter_data
+                    WHERE timestamp >= %s AND timestamp < %s
+                    ORDER BY timestamp ASC
+                """, (start_date, end_date))
+                
+                rows = cur.fetchall()
+                return rows if rows else None
+        finally:
+            conn.close()
+    
+    def generate_period_graph(self, start_date, end_date):
+        """Generate a graph image for the period and return as base64 string"""
+        data = self.get_period_data(start_date, end_date)
+        if not data or len(data) < 2:
+            return None
+        
+        # Extract data
+        timestamps = [row['timestamp'] for row in data]
+        power_w = [row['active_power_w'] or 0 for row in data]
+        import_kwh = [row['total_power_import_kwh'] or 0 for row in data]
+        export_kwh = [row['total_power_export_kwh'] or 0 for row in data]
+        
+        # Create figure with two subplots
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
+        fig.patch.set_facecolor('white')
+        
+        # Plot 1: Power consumption over time
+        ax1.plot(timestamps, power_w, linewidth=1.5, color='#2c5aa0', alpha=0.7)
+        ax1.fill_between(timestamps, power_w, alpha=0.3, color='#2c5aa0')
+        ax1.set_ylabel('Vermogen (W)', fontsize=11, fontweight='bold')
+        ax1.set_title('Actief Vermogen Over Tijd', fontsize=13, fontweight='bold', pad=15)
+        ax1.grid(True, alpha=0.3, linestyle='--')
+        ax1.set_facecolor('#f8f9fa')
+        
+        # Format x-axis dates
+        ax1.xaxis.set_major_formatter(mdates.DateFormatter('%d-%m'))
+        ax1.xaxis.set_major_locator(mdates.DayLocator(interval=max(1, len(timestamps) // 10)))
+        plt.setp(ax1.xaxis.get_majorticklabels(), rotation=45, ha='right')
+        
+        # Plot 2: Cumulative import/export
+        ax2.plot(timestamps, import_kwh, linewidth=2, color='#d32f2f', label='Import (kWh)', alpha=0.8)
+        ax2.plot(timestamps, export_kwh, linewidth=2, color='#388e3c', label='Export (kWh)', alpha=0.8)
+        ax2.set_xlabel('Datum', fontsize=11, fontweight='bold')
+        ax2.set_ylabel('Cumulatief (kWh)', fontsize=11, fontweight='bold')
+        ax2.set_title('Cumulatieve Elektriciteit Import/Export', fontsize=13, fontweight='bold', pad=15)
+        ax2.legend(loc='upper left', framealpha=0.9)
+        ax2.grid(True, alpha=0.3, linestyle='--')
+        ax2.set_facecolor('#f8f9fa')
+        
+        # Format x-axis dates
+        ax2.xaxis.set_major_formatter(mdates.DateFormatter('%d-%m'))
+        ax2.xaxis.set_major_locator(mdates.DayLocator(interval=max(1, len(timestamps) // 10)))
+        plt.setp(ax2.xaxis.get_majorticklabels(), rotation=45, ha='right')
+        
+        # Adjust layout
+        plt.tight_layout()
+        
+        # Convert to base64
+        img_buffer = BytesIO()
+        plt.savefig(img_buffer, format='png', dpi=100, bbox_inches='tight')
+        img_buffer.seek(0)
+        img_base64 = base64.b64encode(img_buffer.read()).decode('utf-8')
+        plt.close(fig)
+        
+        return img_base64
+    
+    def generate_yearly_graph(self, year=None):
+        """Generate a graph showing monthly totals for the year"""
+        if year is None:
+            year = datetime.now().year
+        
+        monthly_data = self.get_yearly_monthly_totals(year)
+        if not monthly_data or len(monthly_data) < 1:
+            return None
+        
+        # Extract data
+        months = [row['timestamp'] for row in monthly_data]
+        electricity_consumed = [row['electricity_consumed'] or 0 for row in monthly_data]
+        electricity_produced = [row['electricity_produced'] or 0 for row in monthly_data]
+        gas_consumed = [row['gas_consumed'] or 0 for row in monthly_data]
+        
+        # Create figure with two subplots
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
+        fig.patch.set_facecolor('white')
+        
+        # Plot 1: Monthly electricity consumption and production
+        x_pos = range(len(months))
+        width = 0.35
+        
+        ax1.bar([x - width/2 for x in x_pos], electricity_consumed, width, 
+                label='Verbruik (kWh)', color='#d32f2f', alpha=0.8)
+        ax1.bar([x + width/2 for x in x_pos], electricity_produced, width,
+                label='Productie (kWh)', color='#388e3c', alpha=0.8)
+        
+        ax1.set_ylabel('Elektriciteit (kWh)', fontsize=11, fontweight='bold')
+        ax1.set_title(f'Maandelijks Elektriciteit Verbruik & Productie - {year}', 
+                     fontsize=13, fontweight='bold', pad=15)
+        ax1.set_xticks(x_pos)
+        ax1.set_xticklabels([m.strftime('%b') for m in months], rotation=45, ha='right')
+        ax1.legend(loc='upper left', framealpha=0.9)
+        ax1.grid(True, alpha=0.3, linestyle='--', axis='y')
+        ax1.set_facecolor('#f8f9fa')
+        
+        # Plot 2: Monthly gas consumption
+        ax2.bar(x_pos, gas_consumed, width=0.6, color='#ff9800', alpha=0.8)
+        ax2.set_xlabel('Maand', fontsize=11, fontweight='bold')
+        ax2.set_ylabel('Gas (m³)', fontsize=11, fontweight='bold')
+        ax2.set_title(f'Maandelijks Gas Verbruik - {year}', 
+                     fontsize=13, fontweight='bold', pad=15)
+        ax2.set_xticks(x_pos)
+        ax2.set_xticklabels([m.strftime('%b') for m in months], rotation=45, ha='right')
+        ax2.grid(True, alpha=0.3, linestyle='--', axis='y')
+        ax2.set_facecolor('#f8f9fa')
+        
+        # Add value labels on bars
+        for i, (elec, gas) in enumerate(zip(electricity_consumed, gas_consumed)):
+            if elec > 0:
+                ax1.text(i - width/2, elec, f'{elec:.0f}', 
+                        ha='center', va='bottom', fontsize=8)
+            if gas > 0:
+                ax2.text(i, gas, f'{gas:.1f}', 
+                        ha='center', va='bottom', fontsize=8)
+        
+        # Adjust layout
+        plt.tight_layout()
+        
+        # Convert to base64
+        img_buffer = BytesIO()
+        plt.savefig(img_buffer, format='png', dpi=100, bbox_inches='tight')
+        img_buffer.seek(0)
+        img_base64 = base64.b64encode(img_buffer.read()).decode('utf-8')
+        plt.close(fig)
+        
+        return img_base64
+    
     def export_period_csv(self, start_date, end_date):
         """Export data for a specific period to CSV"""
         conn = self._get_db_connection()
@@ -163,25 +377,97 @@ class P1Reporter:
                 logger.warning(f"No data available for period {start_date.date()} to {end_date.date()}")
                 return False
             
+            # Determine if this is a monthly report or custom period
+            # Monthly report: starts on day 1 and ends on day 1 of next month (full month)
+            is_monthly = (start_date.day == 1 and end_date.day == 1 and 
+                         start_date.month != end_date.month and
+                         (end_date - start_date).days <= 32)
+            
+            # Show comparison for monthly reports OR periods starting on day 1 (like "this-month")
+            show_comparison = is_monthly or (start_date.day == 1 and start_date.month == end_date.month)
+            
+            # Get previous month stats for comparison
+            prev_month_stats = None
+            if show_comparison:
+                # This is a monthly report, get previous month for comparison
+                try:
+                    prev_month_stats = self.get_previous_month_stats(start_date)
+                    # Keep prev_month_stats even if 0 records, so template can show "no data" message
+                except Exception as e:
+                    logger.warning(f"Could not get previous month stats: {e}")
+                    prev_month_stats = None
+            
             # Get live data
             live_data = self._get_live_data()
             
+            # Generate period graph (always - shows the period's data)
+            logger.info("Generating period graph...")
+            graph_image = None
+            try:
+                graph_image = self.generate_period_graph(start_date, end_date)
+                if graph_image:
+                    logger.info("✓ Period graph generated successfully")
+                else:
+                    logger.warning("No period graph generated (insufficient data)")
+            except Exception as e:
+                logger.warning(f"Period graph generation failed: {e}")
+            
+            # Generate yearly graph (for full monthly reports OR periods starting on day 1 like "this-month")
+            yearly_graph_image = None
+            if is_monthly or show_comparison:
+                logger.info("Generating yearly graph...")
+                try:
+                    yearly_graph_image = self.generate_yearly_graph()
+                    if yearly_graph_image:
+                        logger.info("✓ Yearly graph generated successfully")
+                    else:
+                        logger.warning("No yearly graph generated (insufficient data)")
+                except Exception as e:
+                    logger.warning(f"Yearly graph generation failed: {e}")
+            
             # Generate HTML email
-            html_content = generate_monthly_html(stats, live_data)
+            # Use show_comparison for template (shows comparison for monthly reports and "this-month" type periods)
+            html_content = generate_monthly_html(
+                stats, live_data, 
+                graph_image=graph_image,
+                yearly_graph_image=yearly_graph_image,
+                prev_month_stats=prev_month_stats,
+                is_monthly=show_comparison
+            )
             
             # Generate CSV
             csv_content = self.export_period_csv(start_date, end_date)
             
-            # Determine period name
+            # Determine period name and report type
             if period_name:
-                display_name = period_name
-            elif start_date.month == end_date.month:
+                # For monthly reports, use just the month name without "(tot nu)" suffix
+                if (is_monthly or show_comparison) and start_date.month == end_date.month:
+                    display_name = start_date.strftime('%B %Y')
+                else:
+                    display_name = period_name
+            elif start_date.month == end_date.month and start_date.day == 1 and (end_date - start_date).days <= 32:
                 display_name = start_date.strftime('%B %Y')
             else:
                 display_name = f"{start_date.strftime('%d-%m-%Y')} tot {end_date.strftime('%d-%m-%Y')}"
             
+            # Determine report title/type
+            # Show "Maandoverzicht" for full monthly reports OR periods starting on day 1 (like "this-month")
+            report_title = "Maandoverzicht" if (is_monthly or show_comparison) else "Rapport"
+            report_type = "maandoverzicht" if (is_monthly or show_comparison) else "rapport"
+            
+            # Regenerate HTML with correct title
+            html_content = generate_monthly_html(
+                stats, live_data, 
+                graph_image=graph_image,
+                yearly_graph_image=yearly_graph_image,
+                prev_month_stats=prev_month_stats,
+                report_title=report_title,
+                report_type=report_type,
+                is_monthly=is_monthly
+            )
+            
             # Send email
-            subject = f"P1 Meter Rapport - {display_name}"
+            subject = f"P1 Meter {report_title} - {display_name}"
             csv_filename = f"p1_meter_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.csv"
             
             success = self.email_sender.send_email(
@@ -210,6 +496,7 @@ class P1Reporter:
         last_month_start = (first_of_this_month - timedelta(days=1)).replace(day=1)
         
         month_name = last_month_start.strftime('%B %Y')
+        # This will automatically use "Maandoverzicht" since it's a monthly report
         return self.send_period_report(last_month_start, last_month_end, month_name)
 
 
@@ -553,10 +840,63 @@ Examples:
             if args.no_csv:
                 # Send email without CSV attachment
                 live_data = reporter._get_live_data()
-                from email_templates import generate_monthly_html
-                html_content = generate_monthly_html(stats, live_data, has_csv_attachment=False)
                 
-                subject = f"P1 Meter Rapport - {period_name}"
+                # Determine if this is a monthly report or custom period
+                is_monthly = (start_date.day == 1 and end_date.day == 1 and 
+                             start_date.month != end_date.month and
+                             (end_date - start_date).days <= 32)
+                
+                # Show comparison for monthly reports OR periods starting on day 1 (like "this-month")
+                show_comparison = is_monthly or (start_date.day == 1 and start_date.month == end_date.month)
+                
+                # Get previous month stats for comparison
+                prev_month_stats = None
+                if show_comparison:
+                    try:
+                        prev_month_stats = reporter.get_previous_month_stats(start_date)
+                        # Keep prev_month_stats even if 0 records, so template can show "no data" message
+                    except Exception as e:
+                        logger.warning(f"Could not get previous month stats: {e}")
+                        prev_month_stats = None
+                
+                # Generate period graph (always - shows the period's data)
+                logger.info("Generating period graph...")
+                graph_image = None
+                try:
+                    graph_image = reporter.generate_period_graph(start_date, end_date)
+                    if graph_image:
+                        logger.info("✓ Period graph generated successfully")
+                except Exception as e:
+                    logger.warning(f"Period graph generation failed: {e}")
+                
+                # Generate yearly graph (for full monthly reports OR periods starting on day 1 like "this-month")
+                yearly_graph_image = None
+                if is_monthly or show_comparison:
+                    logger.info("Generating yearly graph...")
+                    try:
+                        yearly_graph_image = reporter.generate_yearly_graph()
+                        if yearly_graph_image:
+                            logger.info("✓ Yearly graph generated successfully")
+                    except Exception as e:
+                        logger.warning(f"Yearly graph generation failed: {e}")
+                
+                # Show "Maandoverzicht" for full monthly reports OR periods starting on day 1 (like "this-month")
+                report_title = "Maandoverzicht" if (is_monthly or show_comparison) else "Rapport"
+                report_type = "maandoverzicht" if (is_monthly or show_comparison) else "rapport"
+                
+                from email_templates import generate_monthly_html
+                html_content = generate_monthly_html(
+                    stats, live_data, 
+                    has_csv_attachment=False, 
+                    graph_image=graph_image,
+                    yearly_graph_image=yearly_graph_image,
+                    prev_month_stats=prev_month_stats,
+                    report_title=report_title,
+                    report_type=report_type,
+                    is_monthly=show_comparison
+                )
+                
+                subject = f"P1 Meter {report_title} - {period_name}"
                 success = reporter.email_sender.send_email(
                     subject=subject,
                     html_content=html_content

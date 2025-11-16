@@ -24,6 +24,7 @@ class EmailSender:
         self.smtp_user = os.getenv('SMTP_USER')
         self.smtp_pass = os.getenv('SMTP_PASS')
         self.smtp_from = os.getenv('SMTP_FROM', self.smtp_user)
+        self.smtp_from_name = os.getenv('SMTP_FROM_NAME', 'P1 Meter Systeem')
         
         # Support multiple recipients (comma-separated)
         smtp_to_raw = os.getenv('P1_EMAIL_TO', '')
@@ -41,7 +42,7 @@ class EmailSender:
         try:
             # Create message
             msg = MIMEMultipart('mixed')
-            msg['From'] = self.smtp_from
+            msg['From'] = f"{self.smtp_from_name} <{self.smtp_from}>"
             msg['To'] = ', '.join(self.smtp_to)  # Join multiple recipients
             msg['Subject'] = subject
             
