@@ -14,10 +14,10 @@ COPY requirements.txt .
 # Install Python packages
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application
-COPY *.py ./
+# Copy application package
+COPY p1monitor/ ./p1monitor/
 
-# Create log directory
+# Create log and output directories
 RUN mkdir -p /var/log /output
 
 # Set timezone
@@ -25,5 +25,5 @@ ENV TZ=Europe/Amsterdam
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # Run application
-CMD ["python", "-u", "app.py"]
+CMD ["python", "-u", "-m", "p1monitor"]
 

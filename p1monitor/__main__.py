@@ -7,13 +7,11 @@ import os
 import sys
 import time
 import logging
-from datetime import datetime
-import requests
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from collector import P1Collector
-from reporter import P1Reporter
+from .collector import P1Collector
+from .reporter import P1Reporter
 
 # Configure logging
 logging.basicConfig(
@@ -61,7 +59,7 @@ class P1Monitor:
                 id='monthly_report',
                 name='Send monthly report'
             )
-            logger.info("✓ Monthly report scheduled (1st of month at 9:00 AM)")
+            logger.info("✓ Monthly report scheduled (1st of month at 00:00)")
         
         # Schedule weekly export (Mondays at 00:00 AM) - optional
         if os.getenv('ENABLE_WEEKLY_EXPORT', 'false').lower() == 'true':
@@ -71,7 +69,7 @@ class P1Monitor:
                 id='weekly_export',
                 name='Weekly CSV export'
             )
-            logger.info("✓ Weekly export scheduled (Mondays at 8:00 AM)")
+            logger.info("✓ Weekly export scheduled (Mondays at 00:00)")
         
         # Start scheduler
         self.scheduler.start()

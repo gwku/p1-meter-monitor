@@ -18,8 +18,8 @@ matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
-from email_sender import EmailSender
-from email_templates import generate_monthly_html
+from .email_sender import EmailSender
+from .templates import generate_monthly_html
 
 logger = logging.getLogger(__name__)
 
@@ -884,7 +884,7 @@ Examples:
                 report_title = "Maandoverzicht" if (is_monthly or show_comparison) else "Rapport"
                 report_type = "maandoverzicht" if (is_monthly or show_comparison) else "rapport"
                 
-                from email_templates import generate_monthly_html
+                from .templates import generate_monthly_html
                 html_content = generate_monthly_html(
                     stats, live_data, 
                     has_csv_attachment=False, 
