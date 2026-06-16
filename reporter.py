@@ -32,7 +32,7 @@ class P1Reporter:
         self.questdb_port = int(os.getenv('QUESTDB_PORT', '8812'))
         self.questdb_user = os.getenv('QUESTDB_USER', 'admin')
         self.questdb_password = os.getenv('QUESTDB_PASSWORD', 'quest')
-        self.api_url = os.getenv('P1_API_URL', 'http://192.168.178.43/api/v1/data')
+        self.api_url = os.getenv('P1_API_URL', 'http://192.168.1.123/api/v1/data')
         
         self.email_sender = EmailSender()
     

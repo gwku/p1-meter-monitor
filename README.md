@@ -35,16 +35,23 @@ docker-compose up -d
 
 ```
 p1-meter-monitor/
-├── app.py                  # Main application with scheduler
-├── collector.py            # Data collection from P1 API
-├── reporter.py             # Report generation
-├── email_sender.py         # SMTP email handling
-├── email_templates.py      # HTML email templates
-├── requirements.txt        # Python dependencies
-├── Dockerfile              # Container image
-├── docker-compose.yml      # Service orchestration
-├── .env.example            # Configuration template
-└── README.md               # This file
+├── app.py                      # Main application with scheduler
+├── collector.py                # Data collection from P1 API
+├── reporter.py                 # Report generation (CLI + scheduled)
+├── email_sender.py             # SMTP email handling
+├── email_templates.py          # HTML email templates
+├── backup_questdb.sh           # QuestDB backup script
+├── backup_questdb_helper.py    # Backup helper (CHECKPOINT handling)
+├── restore_questdb.sh          # QuestDB restore script
+├── requirements.txt            # Python dependencies
+├── Dockerfile                  # Container image
+├── docker-compose.yml          # Local/dev orchestration
+├── docker-compose.prod.yml     # Production (pre-built image)
+├── docker-compose.backup.yml   # Backup service
+├── .env.example                # Configuration template
+├── BACKUP.md                   # Backup & restore guide
+├── QUICKSTART.md               # Quick start guide
+└── README.md                   # This file
 ```
 
 ## ⚙️ Configuration
@@ -53,7 +60,7 @@ Edit `.env` file:
 
 ```bash
 # Required
-P1_API_URL=http://192.168.178.43/api/v1/data  # Your P1 meter API
+P1_API_URL=http://192.168.1.123/api/v1/data  # Your P1 meter API
 
 # Email Recipients (comma-separated for multiple)
 P1_EMAIL_TO=your-email@example.com
@@ -279,14 +286,13 @@ docker-compose restart
 - **Per month**: ~9 MB
 - **Per year**: ~108 MB
 
-## 🎯 Advantages Over Bash Version
+## 🎯 Design Goals
 
-✅ **Simpler** - Single Python app vs multiple bash scripts  
+✅ **Simple** - Single Python app, no sprawling scripts  
 ✅ **Automated** - Built-in scheduler, no external cron  
-✅ **Maintainable** - Python is easier to extend  
-✅ **Robust** - Better error handling  
-✅ **Clean** - 7 files vs 25+ files  
-✅ **Portable** - Pure Docker solution  
+✅ **Maintainable** - Easy to read and extend  
+✅ **Robust** - Sensible error handling and retries  
+✅ **Portable** - Pure Docker solution, runs anywhere  
 
 ## 🔐 Security
 
@@ -319,6 +325,14 @@ Done! Everything runs automatically.
 2. Verify `.env` configuration
 3. Test P1 API connectivity
 4. Check QuestDB web console
+
+## 📄 License
+
+Released under the [MIT License](LICENSE). © 2025 Gerwin Kuijntjes.
+
+> **Note:** This is a personal project shared as-is. The P1 API format and email
+> templates are tailored to a Dutch smart meter setup, but everything is easy to
+> adapt. Contributions and forks are welcome.
 
 ---
 

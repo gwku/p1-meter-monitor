@@ -11,3 +11,7 @@ questdb_data/
 backups/
 *.tar.gz
 
+# Local tooling / OS
+.serena/
+.DS_Store
+

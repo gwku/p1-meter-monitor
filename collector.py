@@ -19,7 +19,7 @@ class P1Collector:
     """Collects P1 meter data and stores in QuestDB"""
     
     def __init__(self):
-        self.api_url = os.getenv('P1_API_URL', 'http://192.168.178.43/api/v1/data')
+        self.api_url = os.getenv('P1_API_URL', 'http://192.168.1.123/api/v1/data')
         self.questdb_host = os.getenv('QUESTDB_HOST', 'localhost')
         self.questdb_port = int(os.getenv('QUESTDB_PORT', '8812'))
         self.questdb_user = os.getenv('QUESTDB_USER', 'admin')
