@@ -109,7 +109,7 @@ SAMPLE BY 1d;
 │   ├── email_sender.py         SMTP delivery
 │   └── templates.py            HTML email templates
 ├── scripts/                    QuestDB backup and restore helpers
-├── docs/                       quick start and backup guides
+├── docs/                       backup and restore guide
 ├── Dockerfile
 ├── docker-compose.yml          local / development
 ├── docker-compose.prod.yml     uses a pre-built image from GHCR
@@ -128,6 +128,23 @@ docker compose logs -f p1-meter-monitor   # follow logs
 docker compose restart p1-meter-monitor   # restart after a config change
 docker compose up -d --build              # rebuild after code changes
 docker compose down                       # stop everything
+```
+
+## Troubleshooting
+
+Email not sending:
+
+```bash
+docker compose exec p1-meter-monitor python -m p1monitor.reporter --test-email
+docker compose logs p1-meter-monitor | grep -i smtp
+```
+
+No data collected — check the meter is reachable and QuestDB is up:
+
+```bash
+docker compose exec p1-meter-monitor curl "$P1_API_URL"
+docker compose logs p1-meter-monitor
+docker compose ps questdb
 ```
 
 ## Backups
