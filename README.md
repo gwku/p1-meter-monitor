@@ -1,5 +1,7 @@
 # P1 Meter Monitor
 
+![P1 Meter Monitor](docs/cover.png)
+
 Collects readings from a P1 smart meter, stores them in a QuestDB time-series
 database, and emails periodic consumption reports. Everything runs in Docker.
 
