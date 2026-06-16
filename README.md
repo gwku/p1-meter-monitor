@@ -3,9 +3,9 @@
 Collects readings from a P1 smart meter, stores them in a QuestDB time-series
 database, and emails periodic consumption reports. Everything runs in Docker.
 
-The P1 port is the standard data interface on Dutch and Belgian smart meters
-(DSMR / eMUCS-P1). This project targets a JSON HTTP API in front of that port,
-such as the one exposed by a HomeWizard P1 dongle (`/api/v1/data`).
+The P1 port is the standard data interface on Dutch smart meters (DSMR). This
+project targets a JSON HTTP API in front of that port, such as the one exposed
+by a HomeWizard P1 dongle (`/api/v1/data`).
 
 ## How it works
 
