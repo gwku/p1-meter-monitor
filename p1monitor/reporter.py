@@ -366,15 +366,16 @@ class P1Reporter:
     
     def send_period_report(self, start_date, end_date, period_name=None):
         """Send email report for a specific period"""
+        display_end = end_date - timedelta(days=1)
         logger.info("=" * 70)
-        logger.info(f"Generating report: {start_date.date()} to {end_date.date()}")
+        logger.info(f"Generating report: {start_date.date()} to {display_end.date()}")
         logger.info("=" * 70)
         
         try:
             # Get statistics
             stats = self.get_period_stats(start_date, end_date)
             if not stats or stats['total_records'] == 0:
-                logger.warning(f"No data available for period {start_date.date()} to {end_date.date()}")
+                logger.warning(f"No data available for period {start_date.date()} to {display_end.date()}")
                 return False
             
             # Determine if this is a monthly report or custom period
@@ -448,7 +449,7 @@ class P1Reporter:
             elif start_date.month == end_date.month and start_date.day == 1 and (end_date - start_date).days <= 32:
                 display_name = start_date.strftime('%B %Y')
             else:
-                display_name = f"{start_date.strftime('%d-%m-%Y')} tot {end_date.strftime('%d-%m-%Y')}"
+                display_name = f"{start_date.strftime('%d-%m-%Y')} tot {display_end.strftime('%d-%m-%Y')}"
             
             # Determine report title/type
             # Show "Maandoverzicht" for full monthly reports OR periods starting on day 1 (like "this-month")
@@ -468,7 +469,7 @@ class P1Reporter:
             
             # Send email
             subject = f"P1 Meter {report_title} - {display_name}"
-            csv_filename = f"p1_meter_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.csv"
+            csv_filename = f"p1_meter_{start_date.strftime('%Y%m%d')}_{display_end.strftime('%Y%m%d')}.csv"
             
             self.email_sender.send_email(
                 subject=subject,
