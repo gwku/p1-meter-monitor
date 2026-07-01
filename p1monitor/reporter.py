@@ -470,23 +470,19 @@ class P1Reporter:
             subject = f"P1 Meter {report_title} - {display_name}"
             csv_filename = f"p1_meter_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.csv"
             
-            success = self.email_sender.send_email(
+            self.email_sender.send_email(
                 subject=subject,
                 html_content=html_content,
                 csv_content=csv_content,
                 csv_filename=csv_filename
             )
-            
-            if success:
-                logger.info(f"✓ Report sent successfully for {display_name}")
-                return True
-            else:
-                logger.error("✗ Failed to send report")
-                return False
-                
+
+            logger.info(f"✓ Report sent successfully for {display_name}")
+            return True
+
         except Exception as e:
             logger.error(f"Report generation failed: {e}", exc_info=True)
-            return False
+            raise
     
     def send_monthly_report(self):
         """Send monthly email report (last complete month)"""
@@ -771,31 +767,19 @@ Examples:
             </html>
             '''
             
-            success = sender.send_email(
+            sender.send_email(
                 subject='✅ P1 Monitor - SMTP Test Successful',
                 html_content=test_html
             )
-            
+
             logger.info("")
-            if success:
-                logger.info("=" * 70)
-                logger.info("✅ TEST PASSED - Email sent successfully!")
-                logger.info("=" * 70)
-                logger.info("")
-                logger.info("Check your inbox to verify the email was received.")
-                logger.info(f"Sent to: {', '.join(sender.smtp_to)}")
-                sys.exit(0)
-            else:
-                logger.info("=" * 70)
-                logger.info("❌ TEST FAILED - Email sending failed")
-                logger.info("=" * 70)
-                logger.info("")
-                logger.info("Please check:")
-                logger.info("  1. SMTP credentials are correct")
-                logger.info("  2. SMTP server is reachable")
-                logger.info("  3. Firewall allows outbound SMTP connections")
-                logger.info("  4. Email addresses are valid")
-                sys.exit(1)
+            logger.info("=" * 70)
+            logger.info("✅ TEST PASSED - Email sent successfully!")
+            logger.info("=" * 70)
+            logger.info("")
+            logger.info("Check your inbox to verify the email was received.")
+            logger.info(f"Sent to: {', '.join(sender.smtp_to)}")
+            sys.exit(0)
         
         # Calculate date range
         if args.period:
@@ -897,16 +881,12 @@ Examples:
                 )
                 
                 subject = f"P1 Meter {report_title} - {period_name}"
-                success = reporter.email_sender.send_email(
+                reporter.email_sender.send_email(
                     subject=subject,
                     html_content=html_content
                 )
-                
-                if success:
-                    logger.info(f"✓ Report sent successfully (no CSV) for {period_name}")
-                else:
-                    logger.error("✗ Failed to send report")
-                    sys.exit(1)
+
+                logger.info(f"✓ Report sent successfully (no CSV) for {period_name}")
             else:
                 # Send report with CSV attachment (default)
                 success = reporter.send_period_report(start_date, end_date, period_name)
